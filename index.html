@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0 user-scalable=no">
+    <title>3D Quiz App</title>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+        "mindar-image-three":"https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+      }
+    }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            /* background-color: red; */
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            outline: none;
+        }
+
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading-screen">Loading...</div>
+    <div id="container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        // import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+        // import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+        import { Card } from './fragments/Card.js';
+        import { FetchService } from './services/FetchService.js';
+        import { MindARThree } from 'mindar-image-three';
+
+        class QuizApp {
+            constructor() {
+                this.initialize();
+            }
+
+            async initialize() {
+                // Store questions in localStorage before initialization
+                const MOCK_QUESTIONS = await FetchService.fetchData();
+                console.log("MOCK_QUESTIONS", MOCK_QUESTIONS);
+
+                localStorage.setItem('Questions', JSON.stringify(MOCK_QUESTIONS));
+
+                const mindarThree = new MindARThree({
+                    container: document.querySelector("#container"),
+                    imageTargetSrc: "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind"
+                });
+
+                this.anchor = mindarThree.addAnchor(0);
+
+                // mindar three setup
+                this.scene = mindarThree.scene;
+                this.camera = mindarThree.camera;
+                this.camera.position.z = 6000;
+                this.renderer = mindarThree.renderer;
+
+                this.scene.camera = this.camera;
+
+                console.log("this.scene", this.scene);
+                console.log("this.camera", this.camera);
+                console.log("this.renderer", this.renderer);
+
+                // Setup lighting
+                this.setupLighting();
+
+                // Create card
+                this.card = new Card(this.scene, new THREE.Vector3(0, 0, 0));
+
+                this.anchor.group.add(this.card.cardGroup);
+
+                this.anchor.onTargetFound = async() => {
+                    console.log("target found")
+                    await this.card;
+                    console.log("anchor before lost", this.anchor);
+                }
+
+                this.anchor.onTargetLost = () => {
+                    console.log("target lost")
+                    console.log("anchor after lost", this.anchor);
+                }
+
+                // Setup event listeners
+                this.setupEventListeners();
+
+                // Remove loading screen
+                document.getElementById('loading-screen').style.display = 'none';
+
+                (async () => {
+                    const start = await mindarThree.start();
+                    // Start animation loop
+                    this.animate();
+                })();
+            }
+
+            setupLighting() {
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                this.scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+                directionalLight.position.set(5, 5, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                this.scene.add(directionalLight);
+
+                const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
+                this.scene.add(hemisphereLight);
+            }
+
+            setupEventListeners() {
+                window.addEventListener('resize', this.onWindowResize.bind(this), false);
+                // condition to check if card is loaded
+
+                window.addEventListener('click', this.onMouseClick.bind(this), false);
+                window.addEventListener('mousemove', this.onMouseMove.bind(this), false);
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            onMouseClick(event) {
+                event.preventDefault();
+                if (this.card) {
+                    this.card.checkButtonClick(event.clientX, event.clientY);
+                }
+            }
+
+            onMouseMove(event) {
+                event.preventDefault();
+                if (this.card && this.card.updateHover) {
+                    this.card.updateHover(event.clientX, event.clientY);
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(this.animate.bind(this));
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // Start the application
+        const app = new QuizApp();
+    </script>
+</body>
+
+</html>
